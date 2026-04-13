@@ -27,3 +27,13 @@ export interface WSMessage {
   theta: number;
   scans?: { angle: number; distance: number }[];
 }
+
+export interface RobotConfig {
+  robot_id: string;
+  name: string;
+  color: string;
+  radius: number;
+  max_speed: number;
+  battery_capacity: number;
+  enabled: boolean;
+}
