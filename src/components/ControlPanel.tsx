@@ -32,8 +32,8 @@ function BatteryBar({ level }: { level: number }) {
 }
 
 export default function ControlPanel({
-  robots,
-  configs,
+  robots = [],
+  configs = [],
   pointCount,
   onClearPoints,
   onResetMap,
