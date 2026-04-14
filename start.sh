@@ -10,51 +10,7 @@ BUN_BIN="${BUN_BIN:-bun}"
 NPM_BIN="${NPM_BIN:-npm}"
 FRONTEND_PM="${FRONTEND_PM:-auto}"
 FRONTEND_PM_RESOLVED=""
-Set-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devSet-Location D:\my_project\SLAM-WebDev-V1.0
-refreshenv
-make FRONTEND_PM=npm devPYTHON_BIN_RESOLVED=""
+PYTHON_BIN_RESOLVED=""
 
 usage() {
 	cat <<'EOF'
