@@ -1,8 +1,20 @@
 import { useRef, useEffect, useCallback, useState } from "react";
-import type { RobotState, LidarPoint, WSMessage, RobotConfig } from "@/types/robot";
+import type {
+  RobotState,
+  LidarPoint,
+  WSMessage,
+  RobotConfig,
+} from "@/types/robot";
 
 const MAX_LIDAR_POINTS = 8000;
 const MAX_PATH_LENGTH = 500;
+const WS_BASE_URL = (
+  import.meta.env.VITE_WS_BASE_URL ?? "ws://localhost:8000"
+).trim();
+
+function normalizeWsBase(baseUrl: string): string {
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+}
 
 function createDefaultRobot(config: RobotConfig): RobotState {
   return {
@@ -16,12 +28,19 @@ function createDefaultRobot(config: RobotConfig): RobotState {
   };
 }
 
-function generateSimScan(pose: { x: number; y: number; theta: number }): { angle: number; distance: number }[] {
+function generateSimScan(pose: {
+  x: number;
+  y: number;
+  theta: number;
+}): { angle: number; distance: number }[] {
   const scans: { angle: number; distance: number }[] = [];
   const numRays = 60;
   for (let i = 0; i < numRays; i++) {
     const angle = (i / numRays) * Math.PI * 2;
-    const baseDistance = 2 + Math.sin(angle * 3 + pose.x * 0.5) * 1.5 + Math.cos(angle * 2 + pose.y * 0.3) * 1;
+    const baseDistance =
+      2 +
+      Math.sin(angle * 3 + pose.x * 0.5) * 1.5 +
+      Math.cos(angle * 2 + pose.y * 0.3) * 1;
     const distance = Math.max(0.3, baseDistance + (Math.random() - 0.5) * 0.4);
     scans.push({ angle, distance });
   }
@@ -32,7 +51,7 @@ function polarToCartesian(
   robotPose: { x: number; y: number; theta: number },
   angle: number,
   distance: number,
-  robotId: string
+  robotId: string,
 ): LidarPoint {
   const worldAngle = robotPose.theta + angle;
   return {
@@ -55,7 +74,9 @@ export function useRobotSimulation(configs: RobotConfig[]) {
   // Sync configs: add new robots, update colors, remove deleted ones
   useEffect(() => {
     const map = robotsRef.current;
-    const enabledIds = new Set(configs.filter((c) => c.enabled).map((c) => c.robot_id));
+    const enabledIds = new Set(
+      configs.filter((c) => c.enabled).map((c) => c.robot_id),
+    );
 
     // Remove robots no longer in config
     for (const id of map.keys()) {
@@ -76,7 +97,15 @@ export function useRobotSimulation(configs: RobotConfig[]) {
 
     let robot = map.get(msg.robot_id);
     if (!robot) {
-      const config = cfg || { robot_id: msg.robot_id, name: msg.robot_id, color: "#888888", radius: 0.3, max_speed: 1, battery_capacity: 100, enabled: true };
+      const config = cfg || {
+        robot_id: msg.robot_id,
+        name: msg.robot_id,
+        color: "#888888",
+        radius: 0.3,
+        max_speed: 1,
+        battery_capacity: 100,
+        enabled: true,
+      };
       robot = createDefaultRobot(config);
       map.set(msg.robot_id, robot);
     }
@@ -89,7 +118,7 @@ export function useRobotSimulation(configs: RobotConfig[]) {
 
     if (msg.scans) {
       const newPoints = msg.scans.map((s) =>
-        polarToCartesian(robot!.pose, s.angle, s.distance, msg.robot_id)
+        polarToCartesian(robot!.pose, s.angle, s.distance, msg.robot_id),
       );
       allPointsRef.current.push(...newPoints);
       if (allPointsRef.current.length > MAX_LIDAR_POINTS) {
@@ -99,16 +128,22 @@ export function useRobotSimulation(configs: RobotConfig[]) {
   }, []);
 
   const flush = useCallback(() => {
-    setRobots(Array.from(robotsRef.current.values()).map((r) => ({ ...r, path: [...r.path] })));
+    setRobots(
+      Array.from(robotsRef.current.values()).map((r) => ({
+        ...r,
+        path: [...r.path],
+      })),
+    );
     setAllPoints([...allPointsRef.current]);
   }, []);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
     let simulating = false;
+    const wsUrl = `${normalizeWsBase(WS_BASE_URL)}/ws`;
 
     try {
-      ws = new WebSocket("ws://localhost:8000/ws");
+      ws = new WebSocket(wsUrl);
       wsRef.current = ws;
       ws.onmessage = (e) => {
         try {
@@ -116,8 +151,12 @@ export function useRobotSimulation(configs: RobotConfig[]) {
           processMessage(msg);
         } catch {}
       };
-      ws.onerror = () => { if (!simulating) startSimulation(); };
-      ws.onclose = () => { if (!simulating) startSimulation(); };
+      ws.onerror = () => {
+        if (!simulating) startSimulation();
+      };
+      ws.onclose = () => {
+        if (!simulating) startSimulation();
+      };
     } catch {
       startSimulation();
     }
@@ -133,8 +172,12 @@ export function useRobotSimulation(configs: RobotConfig[]) {
           const phase = (idx * Math.PI * 2) / Math.max(enabled.length, 1);
           const radius = 2 + idx * 0.8;
           const speed = 0.3 + idx * 0.1;
-          const x = Math.cos(time.t * speed + phase) * radius + Math.sin(time.t * speed * 0.3) * 0.5;
-          const y = Math.sin(time.t * speed + phase) * radius + Math.cos(time.t * speed * 0.4) * 0.5;
+          const x =
+            Math.cos(time.t * speed + phase) * radius +
+            Math.sin(time.t * speed * 0.3) * 0.5;
+          const y =
+            Math.sin(time.t * speed + phase) * radius +
+            Math.cos(time.t * speed * 0.4) * 0.5;
           const theta = time.t * speed + phase + Math.PI / 2;
 
           const scans = generateSimScan({ x, y, theta });

@@ -1,0 +1,29 @@
+[
+  {
+    "robot_id": "ROBOT-01",
+    "name": "Atlas",
+    "color": "#22c55e",
+    "radius": 0.25,
+    "max_speed": 1.2,
+    "battery_capacity": 100.0,
+    "enabled": true
+  },
+  {
+    "robot_id": "ROBOT-02",
+    "name": "Nova",
+    "color": "#3b82f6",
+    "radius": 0.22,
+    "max_speed": 1.1,
+    "battery_capacity": 100.0,
+    "enabled": true
+  },
+  {
+    "robot_id": "r3",
+    "name": "new",
+    "color": "#22dd66",
+    "radius": 0.3,
+    "max_speed": 1.5,
+    "battery_capacity": 100.0,
+    "enabled": true
+  }
+]
