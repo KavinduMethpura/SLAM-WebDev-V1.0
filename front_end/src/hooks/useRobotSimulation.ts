@@ -3,7 +3,6 @@ import type {
   RobotState,
   LidarPoint,
   WSMessage,
-  RobotConfig,
 } from "@/types/robot";
 
 const MAX_LIDAR_POINTS = 8000;
@@ -14,37 +13,6 @@ const WS_BASE_URL = (
 
 function normalizeWsBase(baseUrl: string): string {
   return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-}
-
-function createDefaultRobot(config: RobotConfig): RobotState {
-  return {
-    id: config.robot_id,
-    pose: { x: 0, y: 0, theta: 0 },
-    color: config.color,
-    path: [],
-    connected: true,
-    battery: config.battery_capacity,
-    lidarPoints: [],
-  };
-}
-
-function generateSimScan(pose: {
-  x: number;
-  y: number;
-  theta: number;
-}): { angle: number; distance: number }[] {
-  const scans: { angle: number; distance: number }[] = [];
-  const numRays = 60;
-  for (let i = 0; i < numRays; i++) {
-    const angle = (i / numRays) * Math.PI * 2;
-    const baseDistance =
-      2 +
-      Math.sin(angle * 3 + pose.x * 0.5) * 1.5 +
-      Math.cos(angle * 2 + pose.y * 0.3) * 1;
-    const distance = Math.max(0.3, baseDistance + (Math.random() - 0.5) * 0.4);
-    scans.push({ angle, distance });
-  }
-  return scans;
 }
 
 function polarToCartesian(
@@ -61,64 +29,69 @@ function polarToCartesian(
   };
 }
 
-export function useRobotSimulation(configs: RobotConfig[]) {
-  const robotsRef = useRef<Map<string, RobotState>>(new Map());
-  const [robots, setRobots] = useState<RobotState[]>([]);
+export function useRobotSimulation() {
+  const [robot, setRobot] = useState<RobotState>({
+    id: "ROBOT-01",
+    pose: { x: 0, y: 0, theta: 0 },
+    color: "#22c55e",
+    path: [],
+    connected: false,
+    battery: 100,
+    lidarPoints: [],
+  });
+  const robotRef = useRef<RobotState>({
+    id: "ROBOT-01",
+    pose: { x: 0, y: 0, theta: 0 },
+    color: "#22c55e",
+    path: [],
+    connected: false,
+    battery: 100,
+    lidarPoints: [],
+  });
   const [allPoints, setAllPoints] = useState<LidarPoint[]>([]);
   const allPointsRef = useRef<LidarPoint[]>([]);
+  const exploredCellsRef = useRef<Set<string>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
-  const simRef = useRef<number>(0);
-  const configsRef = useRef(configs);
-  configsRef.current = configs;
-
-  // Sync configs: add new robots, update colors, remove deleted ones
-  useEffect(() => {
-    const map = robotsRef.current;
-    const enabledIds = new Set(
-      configs.filter((c) => c.enabled).map((c) => c.robot_id),
-    );
-
-    // Remove robots no longer in config
-    for (const id of map.keys()) {
-      if (!enabledIds.has(id)) map.delete(id);
-    }
-
-    // Update colors for existing robots
-    configs.forEach((c) => {
-      const existing = map.get(c.robot_id);
-      if (existing) existing.color = c.color;
-    });
-  }, [configs]);
 
   const processMessage = useCallback((msg: WSMessage) => {
-    const map = robotsRef.current;
-    const cfg = configsRef.current.find((c) => c.robot_id === msg.robot_id);
-    if (cfg && !cfg.enabled) return;
-
-    let robot = map.get(msg.robot_id);
-    if (!robot) {
-      const config = cfg || {
-        robot_id: msg.robot_id,
-        name: msg.robot_id,
-        color: "#888888",
-        radius: 0.3,
-        max_speed: 1,
-        battery_capacity: 100,
-        enabled: true,
-      };
-      robot = createDefaultRobot(config);
-      map.set(msg.robot_id, robot);
-    }
-
-    robot.pose = { x: msg.x, y: msg.y, theta: msg.theta };
-    robot.path.push({ ...robot.pose });
-    if (robot.path.length > MAX_PATH_LENGTH) robot.path.shift();
-    robot.battery = Math.max(5, robot.battery - 0.01);
-    robot.connected = true;
+    const r = robotRef.current;
+    r.pose = { x: msg.x, y: msg.y, theta: msg.theta };
+    r.path.push({ ...r.pose });
+    if (r.path.length > MAX_PATH_LENGTH) r.path.shift();
+    r.connected = true;
 
     if (msg.scans) {
-      const newPoints = msg.scans.map((s) =>
-        polarToCartesian(robot!.pose, s.angle, s.distance, msg.robot_id),
+      // 1. Ray-trace to accumulate explored free space cells (empty area grid boxes)
+      const GRID_SIZE = 0.2;
+      const MAX_TRACE_DIST = 2.5;
+      const x0 = msg.x;
+      const y0 = msg.y;
+      
+      // Explore current robot position cell
+      exploredCellsRef.current.add(
+        `${Math.floor(x0 / GRID_SIZE)},${Math.floor(y0 / GRID_SIZE)}`
+      );
+
+      msg.scans.forEach((s) => {
+        const worldAngle = r.pose.theta + s.angle;
+        const hasObstacle = s.distance > 0;
+        const step = GRID_SIZE * 0.5;
+        // Stop ray-tracing just before the obstacle cell to keep the obstacle cell occupied
+        const maxDist = hasObstacle ? s.distance - step : MAX_TRACE_DIST;
+        
+        for (let d = 0; d < maxDist; d += step) {
+          const sx = x0 + Math.cos(worldAngle) * d;
+          const sy = y0 + Math.sin(worldAngle) * d;
+          const col = Math.floor(sx / GRID_SIZE);
+          const row = Math.floor(sy / GRID_SIZE);
+          exploredCellsRef.current.add(`${col},${row}`);
+        }
+      });
+
+      // 2. Filter out out-of-range lidar rays (distance <= 0, e.g. -1.0) so they don't get drawn as fake obstacles
+      const validScans = msg.scans.filter((s) => s.distance > 0);
+      const newPoints = validScans.map((s) =>
+        polarToCartesian(r.pose, s.angle, s.distance, "ROBOT-01"),
       );
       allPointsRef.current.push(...newPoints);
       if (allPointsRef.current.length > MAX_LIDAR_POINTS) {
@@ -128,87 +101,90 @@ export function useRobotSimulation(configs: RobotConfig[]) {
   }, []);
 
   const flush = useCallback(() => {
-    setRobots(
-      Array.from(robotsRef.current.values()).map((r) => ({
-        ...r,
-        path: [...r.path],
-      })),
-    );
+    setRobot({
+      ...robotRef.current,
+      path: [...robotRef.current.path],
+    });
     setAllPoints([...allPointsRef.current]);
   }, []);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
-    let simulating = false;
+    let reconnectTimeout: number;
     const wsUrl = `${normalizeWsBase(WS_BASE_URL)}/ws`;
 
-    try {
-      ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-      ws.onmessage = (e) => {
-        try {
-          const msg: WSMessage = JSON.parse(e.data);
-          processMessage(msg);
-        } catch {}
-      };
-      ws.onerror = () => {
-        if (!simulating) startSimulation();
-      };
-      ws.onclose = () => {
-        if (!simulating) startSimulation();
-      };
-    } catch {
-      startSimulation();
+    function connect() {
+      try {
+        ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+        
+        ws.onmessage = (e) => {
+          try {
+            const msg: WSMessage = JSON.parse(e.data);
+            processMessage(msg);
+          } catch {}
+        };
+        
+        ws.onclose = () => {
+          // Mark offline and schedule reconnect
+          setRobot((prev) => ({ ...prev, connected: false }));
+          reconnectTimeout = window.setTimeout(connect, 3000);
+        };
+        
+        ws.onerror = () => {
+          ws?.close();
+        };
+      } catch {
+        reconnectTimeout = window.setTimeout(connect, 3000);
+      }
     }
 
-    function startSimulation() {
-      simulating = true;
-      const time = { t: 0 };
-
-      const simInterval = setInterval(() => {
-        time.t += 0.05;
-        const enabled = configsRef.current.filter((c) => c.enabled);
-        enabled.forEach((cfg, idx) => {
-          const phase = (idx * Math.PI * 2) / Math.max(enabled.length, 1);
-          const radius = 2 + idx * 0.8;
-          const speed = 0.3 + idx * 0.1;
-          const x =
-            Math.cos(time.t * speed + phase) * radius +
-            Math.sin(time.t * speed * 0.3) * 0.5;
-          const y =
-            Math.sin(time.t * speed + phase) * radius +
-            Math.cos(time.t * speed * 0.4) * 0.5;
-          const theta = time.t * speed + phase + Math.PI / 2;
-
-          const scans = generateSimScan({ x, y, theta });
-          processMessage({ robot_id: cfg.robot_id, x, y, theta, scans });
-        });
-        flush();
-      }, 100);
-
-      simRef.current = simInterval as unknown as number;
-    }
+    connect();
 
     const flushInterval = setInterval(flush, 100);
 
     return () => {
       ws?.close();
+      clearTimeout(reconnectTimeout);
       clearInterval(flushInterval);
-      if (simRef.current) clearInterval(simRef.current);
     };
   }, [processMessage, flush]);
 
   const clearPoints = useCallback(() => {
     allPointsRef.current = [];
+    exploredCellsRef.current.clear();
     setAllPoints([]);
   }, []);
 
   const resetMap = useCallback(() => {
-    robotsRef.current.clear();
+    robotRef.current = {
+      id: "ROBOT-01",
+      pose: { x: 0, y: 0, theta: 0 },
+      color: "#22c55e",
+      path: [],
+      connected: false,
+      battery: 100,
+      lidarPoints: [],
+    };
     allPointsRef.current = [];
-    setRobots([]);
+    exploredCellsRef.current.clear();
+    setRobot({
+      id: "ROBOT-01",
+      pose: { x: 0, y: 0, theta: 0 },
+      color: "#22c55e",
+      path: [],
+      connected: false,
+      battery: 100,
+      lidarPoints: [],
+    });
     setAllPoints([]);
   }, []);
 
-  return { robots, allPoints, clearPoints, resetMap };
+  return {
+    robot,
+    allPoints,
+    exploredCells: exploredCellsRef.current,
+    clearPoints,
+    resetMap,
+  };
 }

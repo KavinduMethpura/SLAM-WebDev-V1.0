@@ -49,9 +49,7 @@ export interface RobotsResponse {
   robots: RobotConfig[];
 }
 
-export interface SimulatorStatusResponse {
-  running: boolean;
-}
+
 
 export async function listRobots(): Promise<RobotConfig[]> {
   const result = await requestJson<RobotsResponse>("/api/robots", {
@@ -89,20 +87,11 @@ export async function deleteRobot(robotId: string): Promise<void> {
   );
 }
 
-export function getSimulatorStatus(): Promise<SimulatorStatusResponse> {
-  return requestJson<SimulatorStatusResponse>("/api/simulator/status", {
-    method: "GET",
-  });
-}
 
-export function startSimulator(): Promise<SimulatorStatusResponse> {
-  return requestJson<SimulatorStatusResponse>("/api/simulator/start", {
-    method: "POST",
-  });
-}
 
-export function stopSimulator(): Promise<SimulatorStatusResponse> {
-  return requestJson<SimulatorStatusResponse>("/api/simulator/stop", {
+export function sendRobotCommand(command: string): Promise<{ success: boolean }> {
+  return requestJson<{ success: boolean }>("/api/robot/command", {
     method: "POST",
+    body: JSON.stringify({ command }),
   });
 }

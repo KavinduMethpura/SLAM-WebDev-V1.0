@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class ScanPoint(BaseModel):
     angle: float
-    distance: float = Field(ge=0.0)
+    distance: float = Field(ge=-1.0)
 
 
 class RobotUpdate(BaseModel):

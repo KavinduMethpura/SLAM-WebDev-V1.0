@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from back_end.models import (
     DeleteResponse,
@@ -12,15 +13,14 @@ from back_end.models import (
     RobotUpdate,
     RobotUpdateRequest,
     RobotsResponse,
-    SimulatorStatusResponse,
 )
 from back_end.robot_manager import (
     DuplicateRobotError,
     RobotManager,
     RobotNotFoundError,
 )
-from back_end.simulator import RobotSimulator
 from back_end.websocket_manager import WebSocketManager
+from back_end.udp_receiver import RobotUDPProtocol
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,7 +28,7 @@ ROBOTS_FILE = BASE_DIR / "robots.json"
 
 robot_manager = RobotManager(ROBOTS_FILE)
 websocket_manager = WebSocketManager()
-simulator = RobotSimulator(robot_manager, websocket_manager)
+udp_receiver: RobotUDPProtocol | None = None
 
 app = FastAPI(title="SLAM Robot Backend", version="1.0.0")
 
@@ -43,13 +43,22 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    global udp_receiver
     await robot_manager.load_robots()
-    simulator.start()
+    
+    # Start UDP receiver for real robot telemetry
+    loop = asyncio.get_running_loop()
+    transport, protocol = await loop.create_datagram_endpoint(
+        lambda: RobotUDPProtocol(websocket_manager),
+        local_addr=('0.0.0.0', 5005)
+    )
+    udp_receiver = protocol
 
 
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
-    await simulator.stop()
+    if udp_receiver and udp_receiver.transport:
+        udp_receiver.transport.close()
 
 
 @app.get("/api/robots")
@@ -102,21 +111,23 @@ async def delete_robot(robot_id: str) -> DeleteResponse:
         ) from exc
 
 
-@app.post("/api/simulator/start")
-async def start_simulator() -> SimulatorStatusResponse:
-    simulator.start()
-    return SimulatorStatusResponse(running=simulator.is_running())
+class CommandRequest(BaseModel):
+    command: str
 
 
-@app.post("/api/simulator/stop")
-async def stop_simulator() -> SimulatorStatusResponse:
-    await simulator.stop()
-    return SimulatorStatusResponse(running=simulator.is_running())
-
-
-@app.get("/api/simulator/status")
-async def simulator_status() -> SimulatorStatusResponse:
-    return SimulatorStatusResponse(running=simulator.is_running())
+@app.post("/api/robot/command")
+async def send_robot_command(payload: CommandRequest):
+    global udp_receiver
+    if not udp_receiver:
+        raise HTTPException(status_code=500, detail="UDP receiver not initialized")
+    
+    success = udp_receiver.send_robot_command(payload.command)
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Robot IP is unknown. Wait until robot starts sending telemetry."
+        )
+    return {"success": True}
 
 
 @app.websocket("/ws")

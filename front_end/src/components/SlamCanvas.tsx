@@ -4,6 +4,7 @@ import type { RobotState, LidarPoint } from "@/types/robot";
 interface Props {
   robots: RobotState[];
   lidarPoints: LidarPoint[];
+  exploredCells: Set<string>;
 }
 
 const GRID_COLOR = "rgba(34,221,102,0.12)";
@@ -13,7 +14,7 @@ const ORIGIN_COLOR = "#22dd66";
 const POINT_ALPHA = 0.5;
 const METERS_PER_GRID = 1;
 
-export default function SlamCanvas({ robots, lidarPoints }: Props) {
+export default function SlamCanvas({ robots, lidarPoints, exploredCells }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef({ offsetX: 0, offsetY: 0, scale: 60 }); // px per meter
   const dragRef = useRef<{ dragging: boolean; lastX: number; lastY: number }>({
@@ -22,8 +23,8 @@ export default function SlamCanvas({ robots, lidarPoints }: Props) {
     lastY: 0,
   });
   const animRef = useRef<number>(0);
-  const dataRef = useRef({ robots, lidarPoints });
-  dataRef.current = { robots, lidarPoints };
+  const dataRef = useRef({ robots, lidarPoints, exploredCells });
+  dataRef.current = { robots, lidarPoints, exploredCells };
 
   const worldToScreen = useCallback(
     (wx: number, wy: number) => {
@@ -83,8 +84,28 @@ export default function SlamCanvas({ robots, lidarPoints }: Props) {
     ctx.arc(origin.sx, origin.sy, 4, 0, Math.PI * 2);
     ctx.fill();
 
+    // Explored Occupancy Grid Cells
+    const { robots: robs, lidarPoints: pts, exploredCells: explored } = dataRef.current;
+    if (explored && explored.size > 0) {
+      const GRID_SIZE = 0.2;
+      ctx.fillStyle = "rgba(34, 221, 102, 0.08)"; // Beautiful semi-transparent neon green
+      explored.forEach((cellKey) => {
+        const [colStr, rowStr] = cellKey.split(",");
+        const col = parseInt(colStr, 10);
+        const row = parseInt(rowStr, 10);
+        
+        const wx = col * GRID_SIZE;
+        const wy = row * GRID_SIZE;
+        
+        const screenPos = worldToScreen(wx, wy);
+        const cellSizePx = GRID_SIZE * v.scale;
+        
+        // Fill square (worldToScreen flips Y axis, so cell bottom-left is screen top-left)
+        ctx.fillRect(screenPos.sx, screenPos.sy - cellSizePx, cellSizePx, cellSizePx);
+      });
+    }
+
     // LiDAR points
-    const { robots: robs, lidarPoints: pts } = dataRef.current;
     const robotColorMap = new Map<string, string>();
     robs.forEach((r) => robotColorMap.set(r.id, r.color));
 
